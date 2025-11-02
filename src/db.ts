@@ -1,16 +1,18 @@
 // src/db.ts
-import { Client } from 'https://deno.land/x/mysql@v2.11.0/mod.ts';
-import { DB_CONFIG } from './config.ts';
+import mysql from "mysql2/promise";
+import {DB_CONFIG_DEVICE, DB_CONFIG_DUTY, DB_CONFIG_USER} from "./config.ts";
 
-
-export const createDbClient = () => new Client();
-
-
-export const getCompanyLoginData = async (startTme: string, endTme: string) => {
-  const client = createDbClient();
+export const getCompanyLoginData = async (
+  startTme: string,
+  endTme: string,
+  activeIds: string[],
+) => {
+  const client = await mysql.createConnection(DB_CONFIG_USER, {
+    connectTimeout: 30000,
+  });
   try {
-    await client.connect(DB_CONFIG);
-    const result = await client.execute(`
+    const [result, fields] = await client.query(
+      `
         SELECT
             spu.company_id as companyId,
             sc.name AS companyName,
@@ -26,49 +28,100 @@ export const getCompanyLoginData = async (startTme: string, endTme: string) => {
         WHERE
             spu.project_no = 'bjsx001'
           AND sll.CREATE_TIME BETWEEN ? AND ?
+          AND spu.company_id IN (?)
+          AND sc.DELETED = '0'
         GROUP BY
             spu.company_id,
             sc.name
         ORDER BY
             loginFrequency DESC;
-    `, [startTme, endTme]);
-    return result.rows as {companyId: string; companyName: string; loginFrequency: number }[];
+    `,
+      [startTme, endTme, activeIds],
+    );
+
+    return result as {
+      companyId: string;
+      companyName: string;
+      loginFrequency: number;
+    }[];
+  } catch (error) {
+    console.error(error);
   } finally {
     await client.close();
   }
 };
 
-export const getCompanyAlarmData = async (startTme: string, endTme: string) => {
-  const client = createDbClient();
+export const getCompanyAlarmData = async (
+  startTme: string,
+  endTme: string,
+  activeIds: string[],
+) => {
+  const connection = await mysql.createConnection(DB_CONFIG_DUTY, {
+    connectTimeout: 300000,
+  });
   try {
-    await client.connect(DB_CONFIG);
-
-    const result = await client.execute(`
+    const [result, fields] = await connection.query(
+      `
     SELECT 
-        sc.NAME as companyName,
         oa.COMPANY_ID as companyId,
-        oa.SUB_TYPE as alarmType,
+        oa.TYPE as alarmType,
         oa.DELAY_LEVEL as delayLevel,
-        COUNT(oa.ID) as totalAlarms,
-        SUM(CASE WHEN oa.STATUS = 2 THEN 1 ELSE 0 END) as handledAlarms,
-        SUM(CASE WHEN oa.STATUS = 2 AND oa.DELAY_LEVEL = 0 THEN 1 ELSE 0 END) as timelyHandled
+        oa.ALARM_TIME as alarmTime,
+        oa.DISPOSE_TIME as disposedTime,
+        oa.DEVICE_ID as deviceId,
+        oa.DEVICE_POSITION as devicePosition,
+        oa.SUB_TYPE as subType
       FROM ff_duty.odt_alarm oa
-      LEFT JOIN ff_user.sys_company sc ON sc.ID = oa.COMPANY_ID
       WHERE oa.PROJECT_NO = 'bjsx001'
         AND oa.CREATE_TIME BETWEEN ? AND ?
-      GROUP BY oa.COMPANY_ID, oa.SUB_TYPE, oa.DELAY_LEVEL
-    `, [startTme, endTme]);
+        AND oa.COMPANY_ID IN (?)
+    `,
+      [startTme, endTme, activeIds],
+    );
 
-    return result.rows as {
+    return result as {
       companyId: string;
-      companyName: string;
       alarmType: string;
-      delayLevel: number;
-      totalAlarms: number;
-      handledAlarms: number;
-      timelyHandled: number;
+      delayLevel: string;
+      alarmTime: string;
+      disposedTime: string | null;
+      deviceId: string;
+      devicePosition: string;
+      subType: string;
     }[];
+  } catch (error) {
+    console.error(error);
   } finally {
-    await client.close();
+    await connection.close();
   }
+};
+
+export const getDeviceInfo = async (
+    activeIds: string[],
+) => {
+    const connection = await mysql.createConnection(DB_CONFIG_DEVICE);
+
+    try {
+        const [result, fields] = await connection.query(
+            `SELECT dpd.COMPANY_ID, dd.ID, dd.TYPE, dd.POSITION, dd.STATUS, dd.OFFLINE_TIME
+             FROM dev_device dd
+                      JOIN dev_project_device dpd ON dpd.DEVICE_ID = dd.ID AND dpd.PROJECT_NO = 'bjsx001'
+             WHERE dd.TYPE IN ('transmissionDevice', 'fireControlHost')
+               AND dd.TRANSFER = '1'
+               AND dpd.COMPANY_ID IN (?)`, [activeIds]
+        );
+
+        return result as {
+            companyId: string;
+            deviceId: string;
+            deviceType: string;
+            position: string;
+            status: string;
+            offlineTime: string;
+        }[];
+    } catch (error) {
+        console.error(error);
+    } finally {
+        await connection.close();
+    }
 }

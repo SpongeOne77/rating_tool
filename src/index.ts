@@ -1,74 +1,57 @@
-import { processData } from './processor.ts';
+import { processData, separateCompaniesWithData } from "./processor.ts";
+import { showWelcome } from "./cli.ts";
+import { activeUnits } from "./mork.ts";
+import { AlarmRecord, CompanyScore } from "./report/types.ts";
 import {
-  showWelcome,
-  showMainMenu,
-  showScoreTable,
-  handleExportData,
-  handleViewHistory,
-  waitForConfirmation,
-} from './cli.ts';
-import {
-  bgBlue,
-  red,
-  white,
-} from 'https://deno.land/std@0.192.0/fmt/colors.ts';
+  batchGenerateReports,
+  exportBatchReports,
+  exportNoDataList,
+} from "./report/monthlyReport.ts";
+import { exportToCsv } from "./exporter.ts";
 
 async function main() {
-  try {
-    showWelcome();
+  showWelcome();
+  const startTime = "2025-09-23 00:00:00";
+  const endTime = "2025-10-21 23:59:59";
+  const reportMonth = "2025-10";
 
-    // 处理数据
-    const scores = await processData('2025-09-01 00:00:00', '2025-09-08 23:59:59');
+  const { scores: allScores, alarmData, deviceData } = await processData(
+    startTime,
+    endTime,
+  );
+  const { scored, noData } = separateCompaniesWithData(activeUnits, allScores);
 
-    // 主循环
-    let currentScores = scores;
+  const baseMeta = {
+    reportMonth,
+    projectNo: "fc_v1",
+    generateTime: new Date().toLocaleString(),
+  };
+  const report = await batchGenerateReports(scored, alarmData, deviceData || [], baseMeta);
 
-    while (true) {
-      const action = await showMainMenu();
+  // export
+  await exportToCsv(allScores);
+  const reportPaths = await exportBatchReports(
+    report,
+    "./reports",
+    reportMonth,
+  );
+  console.log(`已导出${reportPaths.length}份报告`);
 
-      switch (action) {
-        case '1':
-        case 'showScores':
-          showScoreTable(currentScores);
-          await waitForConfirmation();
-          break;
-
-        case '2':
-        case 'exportData':
-          // 需要文件写入权限
-          await handleExportData(currentScores);
-          await waitForConfirmation();
-          break;
-
-        case '3':
-        case 'viewHistory':
-          const historyScores = await handleViewHistory();
-          if (historyScores) {
-            currentScores = historyScores;
-            showScoreTable(currentScores);
-            await waitForConfirmation();
-            currentScores = scores; // 恢复当前评分
-          } else {
-            await waitForConfirmation();
-          }
-          break;
-
-        case '4':
-        case 'exit':
-          console.log(white('\n感谢使用消防云平台评分系统！'));
-          console.log(bgBlue(' '.repeat(80)));
-          return;
-
-        default:
-          console.log(red('无效选择，请重新输入！'));
-          await waitForConfirmation();
-      }
-    }
-  } catch (error) {
-    console.error(red(`程序执行出错:${error}`));
-    Deno.exit(1);
+  // export unit with no data
+  if (noData.length > 0) {
+    const noDataPath = await exportNoDataList(noData, reportMonth);
+    console.log(`已导出无数据单位列表: ${noDataPath}`);
+  }
+  
+  // 导出离线设备单位列表
+  const offlineCompanies = allScores.filter(s => s.hasOfflineDevices);
+  if (offlineCompanies.length > 0) {
+    console.log(`\n⚠️  发现 ${offlineCompanies.length} 个单位存在大量离线设备，不参与排名：`);
+    offlineCompanies.forEach(c => {
+      console.log(`  - ${c.companyName}: ${c.offlineDeviceCount}/${c.totalDeviceCount} 台设备离线 (${(c.offlineRatio! * 100).toFixed(1)}%)`);
+    });
   }
 }
 
 // 执行主程序
-main();
+main().catch(console.error);
