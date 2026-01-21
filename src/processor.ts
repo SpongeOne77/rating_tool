@@ -45,7 +45,7 @@ export async function processData(
     activeUnits.forEach((unit) => {
         const _loginData = loginData.filter(data => data.companyId === unit.id);
         const _alarmStats: AlarmRecord[] = alarmStats.filter(data => data.companyId === unit.id);
-        const _deviceData: DeviceInfo[] = deviceData?.filter(data => data.COMPANY_ID === unit.id) || [];
+        const _deviceData: DeviceInfo[] = deviceData?.filter(data => data.companyId === unit.id) || [];
         
         const score = calculateCompanyScore(unit.id, unit.name, _loginData, _alarmStats, _deviceData);
         _companyScores.push(score);
@@ -62,12 +62,12 @@ export async function processData(
  * 检测设备是否长期离线
  */
 function isDeviceLongOffline(device: DeviceInfo): boolean {
-    if (device.STATUS !== '2') return false; // 不是离线状态
+    if (device.status !== '2') return false; // 不是离线状态
     
-    if (!device.OFFLINE_TIME) return false;
+    if (!device.offlineTime) return false;
     
     try {
-        const offlineTime = new Date(device.OFFLINE_TIME);
+        const offlineTime = new Date(device.offlineTime);
         const now = new Date();
         const offlineHours = (now.getTime() - offlineTime.getTime()) / (1000 * 60 * 60);
         
@@ -97,7 +97,7 @@ function calculateOfflineDeviceStats(devices: DeviceInfo[]): {
         };
     }
     
-    const offlineDevices = devices.filter(d => d.STATUS === '2');
+    const offlineDevices = devices.filter(d => d.status === '2');
     const longOfflineDevices = offlineDevices.filter(d => isDeviceLongOffline(d));
     const offlineRatio = longOfflineDevices.length / devices.length;
     

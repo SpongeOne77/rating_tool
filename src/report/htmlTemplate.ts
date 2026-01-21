@@ -102,6 +102,17 @@ export const generateReportHtml = (report: CompanyMonthlyReport): string => {
       margin-right: 12px;
       border-radius: 2px;
     }
+    .beta-tag {
+      margin-left: 10px;
+      font-size: 12px;
+      font-weight: normal;
+      text-transform: lowercase;
+      background: linear-gradient(135deg, #ff7e00 0%, #ffb800 100%);
+      color: white;
+      padding: 3px 8px;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(255, 126, 0, 0.2);
+    }
     .table-wrapper { overflow-x: auto; margin-bottom: 20px; }
     table { 
       width: 100%; 
@@ -326,6 +337,29 @@ export const generateReportHtml = (report: CompanyMonthlyReport): string => {
       font-size: 48px;
       margin-bottom: 12px;
     }
+        .ai-suggestion-content {
+      background: white;
+      padding: 25px;
+      border-radius: 8px;
+      border: 1px solid #e1e4e8;
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+    }
+    .ai-suggestion-text {
+      color: #24292e;
+      font-size: 14px;
+      line-height: 1.8;
+      white-space: pre-line; /* 保留换行符 */
+      flex: 1;
+    }
+    .disclaimer-text {
+      margin-top: 15px;
+      color: #959da5;
+      font-size: 12px;
+      text-align: right;
+      font-style: italic;
+    }
     .footer-note {
       margin-top: 45px;
       padding-top: 25px;
@@ -345,7 +379,7 @@ export const generateReportHtml = (report: CompanyMonthlyReport): string => {
   <div class="report-container">
     <!-- 头部信息 -->
     <div class="header">
-      <h1>${report.reportMeta.companyName} ${report.reportMeta.reportMonth}月度安全评分报告</h1>
+      <h1>${report.reportMeta.companyName || ''} ${report.reportMeta.reportMonth}月度安全评分报告</h1>
       <div class="meta">
         项目编号：${report.reportMeta.projectNo} | 生成时间：${report.reportMeta.generateTime}
       </div>
@@ -463,6 +497,24 @@ export const generateReportHtml = (report: CompanyMonthlyReport): string => {
           本周期暂无设备告警数据
         </div>
       `}
+    </div>
+    
+    <!-- AI分析建议（新增部分） -->
+    <div class="section">
+      <h2 class="section-title">
+        三、AI分析建议
+        <span class="beta-tag">beta</span>
+      </h2>
+      <div class="ai-suggestion-content">
+        ${report.aiComment ? `
+          <div class="ai-suggestion-text">${report.aiComment}</div>
+        ` : `
+          <div class="no-data-message" style="margin: 0; border: none; padding: 20px 0;">
+            暂无AI分析建议
+          </div>
+        `}
+        <div class="disclaimer-text">ai分析自动生成，内容仅供参考</div>
+      </div>
     </div>
 
     <!-- 底部备注 -->

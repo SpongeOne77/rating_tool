@@ -1,7 +1,7 @@
-import { processData, separateCompaniesWithData } from "./processor.ts";
+// import { processData, separateCompaniesWithData } from "./processor.ts";
+import { processData, separateCompaniesWithData } from "./processor/index.ts";
 import { showWelcome } from "./cli.ts";
 import { activeUnits } from "./mork.ts";
-import { AlarmRecord, CompanyScore } from "./report/types.ts";
 import {
   batchGenerateReports,
   exportBatchReports,
@@ -11,22 +11,19 @@ import { exportToCsv } from "./exporter.ts";
 
 async function main() {
   showWelcome();
-  const startTime = "2025-09-23 00:00:00";
-  const endTime = "2025-10-21 23:59:59";
-  const reportMonth = "2025-10";
+  const startTime = "2025-11-23 00:00:00";
+  const endTime = "2025-12-21 23:59:59";
+  const reportMonth = "2025-12";
+
 
   const { scores: allScores, alarmData, deviceData } = await processData(
     startTime,
     endTime,
+    activeUnits,
   );
   const { scored, noData } = separateCompaniesWithData(activeUnits, allScores);
 
-  const baseMeta = {
-    reportMonth,
-    projectNo: "fc_v1",
-    generateTime: new Date().toLocaleString(),
-  };
-  const report = await batchGenerateReports(scored, alarmData, deviceData || [], baseMeta);
+  const report = await batchGenerateReports(scored, alarmData, deviceData || [], reportMonth);
 
   // export
   await exportToCsv(allScores);
@@ -42,7 +39,7 @@ async function main() {
     const noDataPath = await exportNoDataList(noData, reportMonth);
     console.log(`已导出无数据单位列表: ${noDataPath}`);
   }
-  
+
   // 导出离线设备单位列表
   const offlineCompanies = allScores.filter(s => s.hasOfflineDevices);
   if (offlineCompanies.length > 0) {

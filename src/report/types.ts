@@ -3,10 +3,36 @@ export interface ActiveUnit {
     name: string;
 }
 
+export interface LoginRecord {
+    companyId: string;
+    companyName: string;
+    loginFrequency: number;
+}
+export interface AlarmRecord {
+    companyId: string;
+    companyName: string;
+    alarmType: string;
+    delayLevel: number;
+    alarmTime: string;
+    disposedTime: string | null;
+    deviceId: string;
+    devicePosition: string;
+    subType: string;
+}
+
+export interface DeviceInfo {
+    companyId: string;
+    deviceId: string;
+    deviceType: string;
+    position: string;
+    status: string;
+    offlineTime: string;
+}
+
 export interface ReportMeta {
+    companyId: string;
     companyName: string;
     reportMonth: string;
-    projectNo: string;
     generateTime: string;
 }
 
@@ -48,6 +74,7 @@ export interface CompanyMonthlyReport {
     reportMeta: ReportMeta;
     scoreOverview: ScoreOverview;
     alarmStats: AlarmStats;
+    aiComment?: string;
 }
 
 // 新增逾期时长统计接口
@@ -58,31 +85,7 @@ export interface DelayStats {
     delayLevel3: number; // 三级逾期时长
 }
 
-export interface LoginRecord {
-    companyId: string;
-    companyName: string;
-    loginFrequency: number;
-}
-export interface AlarmRecord {
-    companyId: string;
-    companyName: string;
-    alarmType: string;
-    delayLevel: number;
-    alarmTime: string;
-    disposedTime: string | null;
-    deviceId: string;
-    devicePosition: string;
-    subType: string;
-}
 
-export interface DeviceInfo {
-    companyId: string;
-    deviceId: string;
-    deviceType: string;
-    position: string;
-    status: string;
-    offlineTime: string;
-}
 
 export interface DeviceAlarmRankingItem {
     deviceId: string;

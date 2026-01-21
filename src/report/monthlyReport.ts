@@ -1,7 +1,17 @@
-import {ActiveUnit, CompanyMonthlyReport, ReportMeta, CompanyScore, DeviceInfo} from "./types.ts";
+import {
+    ActiveUnit,
+    CompanyMonthlyReport,
+    ReportMeta,
+    CompanyScore,
+    DeviceInfo,
+    DeviceAlarmRankingItem,
+    ScoreDetail, AlarmRecord,
+} from "./types.ts";
 import { generateReportHtml } from "./htmlTemplate.ts";
 import { ensureDirExists } from "../exporter.ts";
 import {DELAY_THRESHOLDS} from "../config.ts";
+import {ProgressBar} from "../utils/progress.ts";
+import {getAiRemark} from "../db.ts";
 
 // 工具函数：格式化时长（分钟转天时分）
 const formatDuration = (minutes: number): string => {
@@ -23,12 +33,12 @@ const getDeviceTypeChinese = (deviceType: string): string => {
 };
 
 // 生成单家公司月度报告
-export function generateCompanyReport(
+export async function generateCompanyReport(
     company: CompanyScore & { delayStats?: any },
     alarmRecords: AlarmRecord[],
     deviceData: DeviceInfo[],
     reportMeta: ReportMeta
-): CompanyMonthlyReport {
+): Promise<CompanyMonthlyReport> {
     // 计算告警统计
     const totalAlarms = company.alarmFrequency;
     const handledAlarms = alarmRecords.reduce((sum, stat) => {
@@ -76,12 +86,12 @@ export function generateCompanyReport(
 
     // 先添加所有设备信息
     deviceData.forEach(device => {
-        const isOffline = device.STATUS === '2';
+        const isOffline = device.status === '2';
         let offlineDuration = '';
 
-        if (isOffline && device.OFFLINE_TIME) {
+        if (isOffline && device.offlineTime) {
             try {
-                const offlineTime = new Date(device.OFFLINE_TIME);
+                const offlineTime = new Date(device.offlineTime);
                 const now = new Date();
                 const hours = Math.floor((now.getTime() - offlineTime.getTime()) / (1000 * 60 * 60));
                 const days = Math.floor(hours / 24);
@@ -96,10 +106,10 @@ export function generateCompanyReport(
             }
         }
 
-        deviceAlarmMap[device.ID] = {
-            deviceId: device.ID,
-            deviceType: device.TYPE,
-            position: device.POSITION || '未知位置',
+        deviceAlarmMap[device.companyId] = {
+            deviceId: device.deviceId,
+            deviceType: device.deviceType,
+            position: device.position || '未知位置',
             alarmCount: 0,
             isOffline,
             offlineDuration
@@ -153,8 +163,8 @@ export function generateCompanyReport(
         timelinessWithDelay: company.timelinessWithDelay || 0,
         timelinessScore: Number(company.normalizedAlarmTimelinessRate.toFixed(2))
     };
-
-    return {
+//TODO add di comment
+    let companyReport: CompanyMonthlyReport = {
         reportMeta,
         scoreOverview: {
             finalScore: company.finalScore,
@@ -176,27 +186,41 @@ export function generateCompanyReport(
             deviceAlarmRanking
         }
     };
+    const aiReview = await getAiRemark(companyReport);
+    console.log(aiReview);
+    companyReport.aiComment = aiReview;
+    return companyReport;
 }
 
 export async function batchGenerateReports(
     scoredCompanies: CompanyScore[],
     alarmDataMap: AlarmRecord[],
     deviceDataMap: DeviceInfo[],
-    baseMeta: ReportMeta
+    reportMonth: string
 ) {
-    const reports: {companyId: string, html: string}[] = [];
+    const reports: {companyId: string, companyName: string, html: string}[] = [];
+    const length = scoredCompanies.length;
+
+    const progressBar: ProgressBar = new ProgressBar({
+        total: length,
+        barLength: 30,
+        prefix: "计算单位得分中",
+        suffix: "所有单位得分计算完成"
+    })
 
     for (let i = 0; i < scoredCompanies.length; i++) {
         const _companyId = scoredCompanies[i].companyId;
         const _companyName = scoredCompanies[i].companyName;
         const alarmRecords = alarmDataMap.filter(record => record.companyId === _companyId) || [];
-        const deviceRecords = deviceDataMap.filter(device => device.COMPANY_ID === _companyId) || [];
+        const deviceRecords = deviceDataMap.filter(device => device.companyId === _companyId) || [];
         const reportMeta: ReportMeta = {
-            ...baseMeta,
-            companyName: _companyName
+            companyId: _companyId,
+            companyName: _companyName,
+            reportMonth,
+            generateTime: new Date().toLocaleString(),
         };
 
-        const report = generateCompanyReport(scoredCompanies[i], alarmRecords, deviceRecords, reportMeta);
+        const report = await generateCompanyReport(scoredCompanies[i], alarmRecords, deviceRecords, reportMeta);
         const html = generateReportHtml(report);
 
         reports.push({
@@ -204,8 +228,9 @@ export async function batchGenerateReports(
             companyName: _companyName,
             html
         });
+        progressBar.update()
     }
-
+    progressBar.finish()
     return reports;
 }
 
@@ -217,6 +242,12 @@ export async function exportBatchReports(
 ): Promise<string[]> {
     await ensureDirExists(outputDir);
     const filePaths: string[] = [];
+    const progressBar = new ProgressBar({
+        total: reports.length,
+        barLength: 40,
+        prefix: "【导出月度报告】",
+        suffix: "月度报告导出完毕"
+    });
 
     for (const report of reports) {
         const fileName = `${report.companyName}_${reportMonth}_report.html`.replaceAll("/", " ");
@@ -224,8 +255,9 @@ export async function exportBatchReports(
 
         await Deno.writeTextFile(filePath, report.html);
         filePaths.push(filePath);
+        progressBar.update()
     }
-
+    progressBar.finish()
     return filePaths;
 }
 
